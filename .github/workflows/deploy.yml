@@ -15,9 +15,7 @@ env:
   PORT: "3000"
 
 jobs:
-  # ==========================================
-  # STAGE 1: PREPARE
-  # ==========================================
+
   prepare:
     runs-on: self-hosted
     steps:
@@ -30,12 +28,17 @@ jobs:
         with:
           clean: true
 
-      - name: Install Dependencies & Run Tests
-        run: |
-          npm ci
-          npm run lint || echo "Lint warnings ignored"
-          npm test || echo "No tests found"
+      - name: Install Dependencies
+        run: npm ci
 
+      - name: Run Lint
+        run: npm run lint
+        continue-on-error: true # Nếu dính cảnh báo lint, pipeline vẫn tiếp tục chạy
+
+      - name: Run Unit Tests
+        run: npm test
+        continue-on-error: true # Nếu không có test hoặc test fail, pipeline vẫn tiếp tục
+        
   # ==========================================
   # STAGE 2: SCAN-SECURITY (Chạy song song 2 job)
   # ==========================================
