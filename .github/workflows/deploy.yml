@@ -10,7 +10,7 @@ on:
 
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
-  IMAGE_NAME: "your-dockerhub-username/real-time-app" # Thay bằng DockerHub ID của bạn
+  IMAGE_NAME: "truongglitt/real-time-app" # Thay bằng DockerHub ID của bạn
   CONTAINER_NAME: "real-time-app"
   PORT: "3000"
 
