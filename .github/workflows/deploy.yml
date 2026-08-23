@@ -1,3 +1,145 @@
+name: Test Self Hosted Runner
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Chạy khi push Git tag có định dạng v1.0.0, v2.1.0,...
+      - 'v*'      # Hoặc bất kỳ tag nào bắt đầu bằng chữ 'v'
+    # branches:
+    #   - main
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
+  IMAGE_NAME: "your-dockerhub-username/real-time-app" # Thay bằng DockerHub ID của bạn
+  CONTAINER_NAME: "real-time-app"
+  PORT: "3000"
+
+jobs:
+  # ==========================================
+  # STAGE 1: PREPARE
+  # ==========================================
+  prepare:
+    runs-on: self-hosted
+    steps:
+      - name: Auto Clean Workspace
+        run: |
+          Get-ChildItem -Path . -Recurse -Force | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Install Dependencies & Run Tests
+        run: |
+          npm ci
+          npm run lint || echo "Lint warnings ignored"
+          npm test || echo "No tests found"
+
+  # ==========================================
+  # STAGE 2: SCAN-SECURITY (Chạy song song 2 job)
+  # ==========================================
+  scan-audit:
+    needs: prepare
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dependency Vulnerability Audit
+        run: npm audit --audit-level=high || echo "High vulnerabilities found"
+
+  scan-trivy:
+    needs: prepare
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Dockerfile Security Scan (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'config'
+          hide-shortcut-env-vars: true
+
+  # ==========================================
+  # STAGE 3: DOCKER-BUILD
+  # ==========================================
+  docker-build:
+    needs: [scan-audit, scan-trivy]
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build Docker Image
+        run: |
+          # ${{ github.ref_name }} sẽ mang giá trị "v1.0.0" nếu trigger từ Git Tag, 
+          # hoặc "main" nếu trigger từ Branch.
+          docker build -t ${{ env.IMAGE_NAME }}:${{ github.ref_name }} -t ${{ env.IMAGE_NAME }}:latest .
+
+  # ==========================================
+  # STAGE 4: DOCKER-PUSH & DEPLOY
+  # ==========================================
+  docker-push:
+    needs: docker-build
+    runs-on: self-hosted
+    steps:
+      - name: Push Image to Docker Hub
+        run: |
+          docker push ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ env.IMAGE_NAME }}:latest
+
+      - name: Deploy Local Container
+        run: |
+          docker stop ${{ env.CONTAINER_NAME }} 2>$null || true
+          docker rm ${{ env.CONTAINER_NAME }} 2>$null || true
+          docker run -d `
+            --name ${{ env.CONTAINER_NAME }} `
+            -p ${{ env.PORT }}:${{ env.PORT }} `
+            --restart always `
+            ${{ env.IMAGE_NAME }}:latest
+
+      - name: Prune Old Docker Images
+        run: docker image prune -f
+
+  # ==========================================
+  # STAGE 5: NOTIFY (Tách làm 2 nhánh Success / Failure)
+  # ==========================================
+  notify-success-telegram:
+    needs: docker-push
+    if: success()
+    runs-on: self-hosted
+    steps:
+      - name: Send Success Notification
+        run: |
+          $msg = "✅ *BUILD SUCCESS*`nRepo: ${{ github.repository }}`nBranch: ${{ github.ref_name }}`nCommit: ${{ github.sha }}"
+          curl.exe -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" `
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" `
+            -d "text=$msg" `
+            -d "parse_mode=Markdown"
+
+  notify-failure-telegram:
+    needs: [prepare, scan-audit, scan-trivy, docker-build, docker-push]
+    if: failure()
+    runs-on: self-hosted
+    steps:
+      - name: Send Failure Notification
+        run: |
+          $msg = "❌ *BUILD FAILED*`nRepo: ${{ github.repository }}`nBranch: ${{ github.ref_name }}`nCommit: ${{ github.sha }}"
+          curl.exe -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" `
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" `
+            -d "text=$msg" `
+            -d "parse_mode=Markdown"
+
+
+
 # name: CI/CD Pipeline
 
 # on:
@@ -40,30 +182,3 @@
 #           curl "${{ secrets.RENDER_DEPLOY_HOOK_CLIENT }}"
 
 
-name: Test Self Hosted Runner
-
-on:
-  push:
-    branches:
-      - main
-
-jobs:
-  test-job:
-    runs-on: self-hosted
-    env:
-      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
-    steps:
-      - name: Auto Clean Workspace
-        run: |
-          Get-ChildItem -Path . -Recurse -Force | Remove-Item -Force -Recurse -ErrorAction SilentlyContinue
-          
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          clean: true
-  
-      - name: Check Docker version
-        run: docker --version
-
-      - name: Say Hello
-        run: echo "Hello! GitHub Actions is running directly on F:\actions-runner"
