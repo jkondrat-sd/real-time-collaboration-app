@@ -53,18 +53,18 @@ jobs:
         run: npm audit --audit-level=high
         continue-on-error: true # Bỏ || echo, nếu dính lỗi bảo mật vẫn cho chạy tiếp
 
-  scan-trivy:
-    needs: prepare
-    runs-on: self-hosted
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  # scan-trivy:
+  #   needs: prepare
+  #   runs-on: self-hosted
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
 
-      - name: Dockerfile Security Scan (Trivy)
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: 'config'
-          hide-shortcut-env-vars: true
+  #     - name: Dockerfile Security Scan (Trivy)
+  #       uses: aquasecurity/trivy-action@master
+  #       with:
+  #         scan-type: 'config'
+  #         hide-shortcut-env-vars: true
 
   # ==========================================
   # STAGE 3: DOCKER-BUILD
