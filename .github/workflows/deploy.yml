@@ -134,7 +134,7 @@ jobs:
             -d "parse_mode=Markdown"
 
   notify-failure-telegram:
-    needs: [prepare, scan-audit, scan-trivy, docker-build, docker-push]
+    needs: [prepare, scan-audit, docker-build, docker-push]
     if: failure()
     runs-on: self-hosted
     steps:
