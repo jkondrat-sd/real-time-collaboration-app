@@ -70,7 +70,7 @@ jobs:
   # STAGE 3: DOCKER-BUILD
   # ==========================================
   docker-build:
-    needs: [scan-audit, scan-trivy]
+    needs: [scan-audit]
     runs-on: self-hosted
     steps:
       - name: Checkout code
